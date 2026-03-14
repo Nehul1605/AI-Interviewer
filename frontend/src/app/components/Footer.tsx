@@ -36,8 +36,6 @@ export function Footer() {
               <li><a href="#" className="hover:text-white transition-colors">Features</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Practice Mode</a></li>
               <li><a href="#" className="hover:text-white transition-colors">HR Dashboard</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">API</a></li>
             </ul>
           </div>
           
@@ -47,9 +45,7 @@ export function Footer() {
             <ul className="space-y-3 text-sm text-gray-400">
               <li><a href="#" className="hover:text-white transition-colors">Documentation</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Case Studies</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Support</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Status</a></li>
             </ul>
           </div>
           
@@ -57,8 +53,6 @@ export function Footer() {
           <div>
             <h4 className="mb-4">Company</h4>
             <ul className="space-y-3 text-sm text-gray-400">
-              <li><a href="#" className="hover:text-white transition-colors">About</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Privacy</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Terms</a></li>
               <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>

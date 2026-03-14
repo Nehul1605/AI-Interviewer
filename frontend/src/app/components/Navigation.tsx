@@ -27,9 +27,6 @@ export function Navigation() {
             <a href="#how-it-works" className="text-gray-300 hover:text-white transition-colors">
               How It Works
             </a>
-            <a href="#pricing" className="text-gray-300 hover:text-white transition-colors">
-              Pricing
-            </a>
             <a href="#about" className="text-gray-300 hover:text-white transition-colors">
               About
             </a>
