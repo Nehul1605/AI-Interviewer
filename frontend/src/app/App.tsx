@@ -17,6 +17,11 @@ export default function App() {
   const isDashboardPage = window.location.pathname === "/dashboard";
   const isHRDashboardPage = window.location.pathname === "/dashboard/hr";
 
+  // Simple token check for protected routes
+  const isAuthenticated = () => {
+    return !!localStorage.getItem("token");
+  };
+
   if (isSignInPage) {
     return <SignIn />;
   }
@@ -25,11 +30,20 @@ export default function App() {
     return <SignUp />;
   }
 
+  // Protected Routes
   if (isDashboardPage) {
+    if (!isAuthenticated()) {
+      window.location.href = "/signin";
+      return null;
+    }
     return <Dashboard role="candidate" userName="Candidate" />;
   }
 
   if (isHRDashboardPage) {
+    if (!isAuthenticated()) {
+      window.location.href = "/signin";
+      return null;
+    }
     return <Dashboard role="hr" userName="HR" />;
   }
 

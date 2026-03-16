@@ -12,7 +12,51 @@ import { Input } from "./ui/input";
 import { Checkbox } from "./ui/checkbox";
 import { Label } from "./ui/label";
 
+import { useState } from "react";
 export function SignUp() {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agreeTerms) {
+      setError("Please agree to the Terms of Service.");
+      return;
+    }
+    
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch("http://localhost:8000/api/v1/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          // role defaults to CANDIDATE in the backend
+        }),
+      });
+
+      if (res.ok) {
+        // Redirect to login or automatically log them in
+        window.location.href = "/signin";
+      } else {
+        const data = await res.json();
+        setError(data.detail || "Registration failed. Please try again.");
+      }
+    } catch (err) {
+      setError("Network error. Could not connect to the server.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
   return (
     <div className="h-screen bg-gray-100 flex items-center justify-center p-4 md:p-6 font-sans overflow-hidden">
       <div className="max-w-6xl w-full bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row h-full max-h-[720px]">
@@ -39,7 +83,13 @@ export function SignUp() {
             </p>
           </motion.div>
 
-          <form className="space-y-4">
+          <form className="space-y-4" onSubmit={handleSignUp}>
+            {error && (
+              <div className="p-3 text-sm text-red-500 bg-red-50 rounded-xl border border-red-100">
+                {error}
+              </div>
+            )}
+            
             <div className="space-y-1.5">
               <Label htmlFor="name">Full Name</Label>
               <div className="relative">
@@ -47,7 +97,10 @@ export function SignUp() {
                 <Input
                   id="name"
                   placeholder="John Doe"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
                   className="pl-12 h-11 bg-gray-50 border-none rounded-xl focus-visible:ring-black"
+                  required
                 />
               </div>
             </div>
@@ -58,8 +111,12 @@ export function SignUp() {
                 <Mail className="absolute left-4 top-3 h-5 w-5 text-gray-400" />
                 <Input
                   id="email"
+                  type="email"
                   placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="pl-12 h-11 bg-gray-50 border-none rounded-xl focus-visible:ring-black"
+                  required
                 />
               </div>
             </div>
@@ -72,7 +129,10 @@ export function SignUp() {
                   id="password"
                   type="password"
                   placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="pl-12 h-11 bg-gray-50 border-none rounded-xl focus-visible:ring-black"
+                  required
                 />
               </div>
             </div>
@@ -80,6 +140,8 @@ export function SignUp() {
             <div className="flex items-center space-x-2 py-1">
               <Checkbox
                 id="terms"
+                checked={agreeTerms}
+                onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
                 className="rounded-md border-gray-300 data-[state=checked]:bg-black data-[state=checked]:border-black"
               />
               <label
@@ -97,8 +159,12 @@ export function SignUp() {
               </label>
             </div>
 
-            <Button className="w-full h-11 bg-[#1a1a1a] hover:bg-black text-white rounded-xl text-base font-semibold transition-all duration-300 shadow-sm">
-              Create account
+            <Button 
+              type="submit"
+              disabled={isLoading || !agreeTerms}
+              className="w-full h-11 bg-[#1a1a1a] hover:bg-black text-white rounded-xl text-base font-semibold transition-all duration-300 shadow-sm disabled:opacity-50"
+            >
+              {isLoading ? "Creating account..." : "Create account"}
             </Button>
           </form>
 

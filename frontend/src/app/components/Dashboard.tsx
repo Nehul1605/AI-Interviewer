@@ -96,7 +96,31 @@ export function Dashboard({
   const [isInterviewActive, setIsInterviewActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [jobDescription, setJobDescription] = useState("");
+  const [hasResume, setHasResume] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [displayName, setDisplayName] = useState(userName || "Candidate");
+  const [sessionData, setSessionData] = useState<any>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    // Fetch user details to see if they already have a resume
+    const token = localStorage.getItem("token");
+    if (token) {
+      fetch("http://localhost:8000/api/v1/user/me", {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.email) {
+            setDisplayName(data.email.split('@')[0]); // Use first part of email as name for demo
+        }
+        if (data.has_resume) {
+          setHasResume(true);
+        }
+      })
+      .catch(console.error);
+    }
+  }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -104,13 +128,77 @@ export function Dashboard({
     }
   };
 
-  const startInterview = () => {
-    setShowUploadModal(false);
-    setIsInterviewActive(true);
+  const uploadResumeOptional = async (): Promise<boolean> => {
+    if (hasResume) return true;
+    if (!selectedFile) return false;
+    
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    const token = localStorage.getItem("token");
+
+    try {
+      const res = await fetch("http://localhost:8000/api/v1/user/resume", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (res.ok) {
+        setHasResume(true);
+        setIsUploading(false);
+        return true;
+      }
+    } catch (err) {
+      console.error("Resume upload failed", err);
+    }
+    setIsUploading(false);
+    return false;
   };
 
-  if (isInterviewActive) {
-    return <InterviewSession onExit={() => setIsInterviewActive(false)} />;
+  const startInterview = async () => {
+    const success = await uploadResumeOptional();
+    if (success) {
+      setIsUploading(true);
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch("http://localhost:8000/api/v1/interview/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            job_role: jobDescription || "General",
+            jd_text: jobDescription
+          })
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setSessionData(data);
+          setShowUploadModal(false);
+          setIsInterviewActive(true);
+        } else {
+          const errorData = await res.json();
+          alert(`Failed to create interview session: ${errorData.detail || 'Unknown error'}`);
+        }
+      } catch (err) {
+        console.error("Error creating session:", err);
+        alert("Error connecting to server to create session.");
+      } finally {
+        setIsUploading(false);
+      }
+    } else {
+      alert("Failed to process resume. Please try again.");
+    }
+  };
+
+  if (isInterviewActive && sessionData) {
+    return <InterviewSession 
+      sessionId={sessionData.id} 
+      questions={sessionData.questions || []}
+      onExit={() => { setIsInterviewActive(false); setSessionData(null); }} 
+    />;
   }
 
   return (
@@ -152,7 +240,10 @@ export function Dashboard({
           <SidebarLink
             icon={<LogOut size={20} />}
             label="Logout"
-            onClick={() => (window.location.href = "/")}
+            onClick={() => {
+                localStorage.removeItem("token");
+                window.location.href = "/";
+            }}
           />
         </div>
       </aside>
@@ -163,7 +254,7 @@ export function Dashboard({
         <header className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-6">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold text-white tracking-tight">
-              Welcome back, {userName || "Candidate"}
+              Welcome back, {displayName}
             </h1>
             <p className="text-gray-400 text-sm font-medium">
               Monitor your progress and refine your skills.
@@ -177,8 +268,8 @@ export function Dashboard({
               <Plus size={18} />
               New Interview
             </Button>
-            <div className="h-12 w-12 rounded-full border border-white/20 shadow-sm bg-white/10 hidden sm:flex items-center justify-center text-white font-bold text-lg">
-              {userName ? userName.charAt(0).toUpperCase() : "C"}
+            <div className="h-12 w-12 rounded-full border border-white/20 shadow-sm bg-white/10 hidden sm:flex items-center justify-center text-white font-bold text-lg uppercase">
+              {displayName.charAt(0)}
             </div>
           </div>
         </header>
@@ -456,55 +547,57 @@ export function Dashboard({
                     />
                   </div>
 
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">
-                      2. Resume (.pdf)
-                    </label>
-                    <div
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center transition-all cursor-pointer ${
-                        selectedFile
-                          ? "border-green-500/50 bg-green-500/5"
-                          : "border-white/20 hover:border-white/40 hover:bg-white/5"
-                      }`}
-                    >
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileChange}
-                        className="hidden"
-                        accept=".pdf"
-                      />
-                      {selectedFile ? (
-                        <div className="flex items-center gap-4">
-                          <FileText className="text-green-400" size={24} />
-                          <div className="text-left">
-                            <p className="font-bold text-white text-sm truncate max-w-[200px]">
-                              {selectedFile.name}
-                            </p>
-                            <p className="text-[10px] text-green-400/80 font-bold">
-                              READY
-                            </p>
+                  {!hasResume && (
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest pl-1">
+                        2. Resume (.pdf)
+                      </label>
+                      <div
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`border border-dashed rounded-2xl p-8 flex flex-col items-center justify-center transition-all cursor-pointer ${
+                          selectedFile
+                            ? "border-green-500/50 bg-green-500/5"
+                            : "border-white/20 hover:border-white/40 hover:bg-white/5"
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleFileChange}
+                          className="hidden"
+                          accept=".pdf"
+                        />
+                        {selectedFile ? (
+                          <div className="flex items-center gap-4">
+                            <FileText className="text-green-400" size={24} />
+                            <div className="text-left">
+                              <p className="font-bold text-white text-sm truncate max-w-[200px]">
+                                {selectedFile.name}
+                              </p>
+                              <p className="text-[10px] text-green-400/80 font-bold">
+                                READY
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-4">
-                          <Upload className="text-gray-400" size={20} />
-                          <span className="text-sm font-bold text-gray-400">
-                            Select File
-                          </span>
-                        </div>
-                      )}
+                        ) : (
+                          <div className="flex items-center gap-4">
+                            <Upload className="text-gray-400" size={20} />
+                            <span className="text-sm font-bold text-gray-400">
+                              Select File
+                            </span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   <div className="flex gap-4 pt-4">
                     <Button
-                      disabled={!selectedFile || !jobDescription}
+                      disabled={(!selectedFile && !hasResume) || !jobDescription || isUploading}
                       onClick={startInterview}
                       className="flex-1 h-14 bg-white hover:bg-gray-200 text-black rounded-2xl font-bold shadow-xl flex items-center justify-center gap-2 group transition-all"
                     >
-                      Launch Simulation
+                      {isUploading ? "Processing Setup..." : "Start Interview"}
                       <ArrowRight
                         size={18}
                         className="group-hover:translate-x-1 transition-transform"
