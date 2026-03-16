@@ -16,10 +16,19 @@ import {
 } from "lucide-react";
 import { Button } from "./ui/button";
 
-export function InterviewSession({ onExit }: { onExit: () => void }) {
+export function InterviewSession({ 
+  sessionId,
+  questions,
+  onExit 
+}: { 
+  sessionId: number;
+  questions: any[];
+  onExit: () => void;
+}) {
   const [step, setStep] = useState<"setup" | "interview">("setup");
   const [isReady, setIsReady] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
   const setupVideoRef = useRef<HTMLVideoElement>(null);
   const interviewVideoRef = useRef<HTMLVideoElement>(null);
@@ -31,6 +40,14 @@ export function InterviewSession({ onExit }: { onExit: () => void }) {
 
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
+  
+  // Custom interview states
+  const [isPlayingTTS, setIsPlayingTTS] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [currentSubtitle, setCurrentSubtitle] = useState("");
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const startAudioVisualizer = (stream: MediaStream) => {
     const audioContext = new (
@@ -104,8 +121,117 @@ export function InterviewSession({ onExit }: { onExit: () => void }) {
   useEffect(() => {
     if (step === "interview" && interviewVideoRef.current && stream) {
       interviewVideoRef.current.srcObject = stream;
+      
+      const firstQuestion = questions[0]?.content || "Tell me about yourself.";
+      // Play intro TTS
+      playTTS(`Hello, I am your AI Architect interviewer. Let's begin the interview process. I will ask you a series of questions based on your resume and the role you applied for. First question: ${firstQuestion}`);
     }
   }, [step, stream]);
+
+  const playTTS = async (text: string) => {
+    setIsPlayingTTS(true);
+    setCurrentSubtitle(text);
+    try {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+      }
+      const audioUrl = `http://localhost:8000/api/v1/tts/generate?text=${encodeURIComponent(text)}`;
+      const audio = new Audio(audioUrl);
+      currentAudioRef.current = audio;
+      
+      audio.onended = () => {
+        setIsPlayingTTS(false);
+        setCurrentSubtitle("Waiting for your response...");
+      };
+      
+      await audio.play();
+    } catch (err) {
+      console.error("Failed to play TTS", err);
+      setIsPlayingTTS(false);
+    }
+  };
+
+  const startRecording = () => {
+    if (!stream) return;
+    setIsRecording(true);
+    audioChunksRef.current = [];
+    
+    // We only need the audio tracks for recording
+    const audioStream = new MediaStream(stream.getAudioTracks());
+    const mediaRecorder = new MediaRecorder(audioStream, { mimeType: 'audio/webm' });
+    mediaRecorderRef.current = mediaRecorder;
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunksRef.current.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+      await submitAudioAnswer(audioBlob);
+    };
+
+    mediaRecorder.start();
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      setCurrentSubtitle("Processing your answer...");
+    }
+  };
+
+  const submitAudioAnswer = async (audioBlob: Blob) => {
+    const formData = new FormData();
+    formData.append("audio_file", audioBlob, "answer.webm");
+    
+    const currentQ = questions[currentQuestionIndex];
+    if (!currentQ) {
+       setCurrentSubtitle("Error: No question active.");
+       return;
+    }
+    
+    formData.append("question_id", currentQ.id.toString()); 
+    const token = localStorage.getItem("token");
+    
+    try {
+      const res = await fetch(`http://localhost:8000/api/v1/interview/${sessionId}/answer-audio`, {
+        method: "POST",
+        headers: {
+           // We do NOT set Content-Type for FormData, the browser sets it with boundaries automatically
+           ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: formData,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        console.log("Answer saved:", data);
+        
+        if (!data.is_final) {
+            // AI decided this was a question/clarification/hint, so just speak the AI response
+            playTTS(data.ai_response);
+        } else {
+            // It was a final answer attempt for this question
+            if (currentQuestionIndex < questions.length - 1) {
+                const nextIndex = currentQuestionIndex + 1;
+                setCurrentQuestionIndex(nextIndex);
+                // Speak the AI's feedback on their answer + the next question
+                playTTS(`${data.ai_response} Let's move on. ${questions[nextIndex].content}`);
+            } else {
+                playTTS(`${data.ai_response} We have completed all the questions for this interview. Thank you for your time.`);
+            }
+        }
+      } else {
+        console.error("Failed to submit audio", await res.text());
+        setCurrentSubtitle("Failed to process audio. Please try again.");
+      }
+    } catch (err) {
+      console.error("Submit error", err);
+      setCurrentSubtitle("Error submitting audio");
+    }
+  };
 
   // Clean up media stream and audio context when component unmounts
   useEffect(() => {
@@ -136,6 +262,9 @@ export function InterviewSession({ onExit }: { onExit: () => void }) {
   const endInterview = () => {
     if (stream) {
       stream.getTracks().forEach((track) => track.stop());
+    }
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
     }
     onExit();
   };
@@ -368,10 +497,15 @@ export function InterviewSession({ onExit }: { onExit: () => void }) {
               Interview AI
             </h3>
             <p className="text-gray-400 text-sm font-medium flex items-center justify-center gap-2">
-              {audioVolume.some((v) => v > 10) ? (
+              {isPlayingTTS ? (
                 <>
                   <Waves size={16} className="text-indigo-400 animate-pulse" />
-                  <span className="text-indigo-300">Listening to you...</span>
+                  <span className="text-indigo-300">Speaking...</span>
+                </>
+              ) : isRecording ? (
+                <>
+                   <Mic size={16} className="text-red-400 animate-pulse" />
+                   <span className="text-red-300">Recording your answer...</span>
                 </>
               ) : (
                 <>
@@ -383,15 +517,28 @@ export function InterviewSession({ onExit }: { onExit: () => void }) {
           </div>
 
           {/* Subtitles / transcript */}
-          <div className="absolute bottom-12 left-0 right-0 px-12">
-            <div className="bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6 text-center max-w-3xl mx-auto">
-              <p className="text-lg md:text-xl font-medium leading-relaxed text-white">
-                <span className="opacity-50">
-                  "Could you explain how you would design a highly scalable
-                  microservices architecture... "
-                </span>
-              </p>
-            </div>
+          <div className="absolute bottom-12 left-0 right-0 px-12 pb-6 text-center">
+            {currentSubtitle && (
+              <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-6 text-center max-w-3xl mx-auto mb-6">
+                <p className="text-lg md:text-md font-medium leading-relaxed text-white">
+                  <span>{currentSubtitle}</span>
+                </p>
+              </div>
+            )}
+            
+            {/* Answer Control Button */}
+            {!isPlayingTTS && (
+              <Button 
+                onClick={isRecording ? stopRecording : startRecording}
+                className={`h-14 px-8 rounded-full font-bold shadow-xl flex items-center justify-center gap-2 mx-auto transition-all ${
+                  isRecording 
+                  ? "bg-red-500 hover:bg-red-600 text-white animate-pulse" 
+                  : "bg-white text-black hover:bg-gray-200"
+                }`}
+              >
+                {isRecording ? "Finish Speaking" : "Click to Speak"}
+              </Button>
+            )}
           </div>
         </div>
 

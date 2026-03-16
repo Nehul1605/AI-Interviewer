@@ -15,16 +15,45 @@ import { Label } from "./ui/label";
 export function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError("");
 
-    // Simple logic for the hackathon demo:
-    // If email contains "hr", go to HR dashboard, else Candidate
-    if (email.toLowerCase().includes("hr")) {
-      window.location.href = "/dashboard/hr";
-    } else {
-      window.location.href = "/dashboard";
+    try {
+      const formData = new URLSearchParams();
+      formData.append("username", email);
+      formData.append("password", password);
+
+      const res = await fetch("http://localhost:8000/api/v1/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("token", data.access_token);
+        
+        // Use demo HR routing logic if email contains HR for hackathon
+        if (email.toLowerCase().includes("hr")) {
+          window.location.href = "/dashboard/hr";
+        } else {
+          window.location.href = "/dashboard";
+        }
+      } else {
+        const data = await res.json();
+        setError(data.detail || "Invalid email or password");
+      }
+    } catch (err) {
+      setError("Network error. Could not connect to the server.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -53,6 +82,11 @@ export function SignIn() {
           </motion.div>
 
           <form className="space-y-4" onSubmit={handleSubmit}>
+            {error && (
+              <div className="p-3 text-sm text-red-500 bg-red-50 rounded-xl border border-red-100">
+                {error}
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-gray-700">
                 Email Address
@@ -109,9 +143,10 @@ export function SignIn() {
 
             <Button
               type="submit"
-              className="w-full h-11 bg-[#1a1a1a] hover:bg-black text-white rounded-xl text-base font-semibold transition-all duration-300 shadow-sm"
+              disabled={isLoading}
+              className="w-full h-11 bg-[#1a1a1a] hover:bg-black text-white rounded-xl text-base font-semibold transition-all duration-300 shadow-sm disabled:opacity-50"
             >
-              Sign in
+              {isLoading ? "Signing in..." : "Sign in"}
             </Button>
           </form>
 
