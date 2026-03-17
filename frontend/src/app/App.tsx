@@ -10,6 +10,7 @@ import { Footer } from "./components/Footer";
 import { SignIn } from "./components/SignIn";
 import { SignUp } from "./components/SignUp";
 import { Dashboard } from "./components/Dashboard";
+import { HRDashboard } from "./components/HRDashboard";
 
 export default function App() {
   const isSignInPage = window.location.pathname === "/signin";
@@ -40,11 +41,15 @@ export default function App() {
   }
 
   if (isHRDashboardPage) {
+<<<<<<< Updated upstream
     if (!isAuthenticated()) {
       window.location.href = "/signin";
       return null;
     }
     return <Dashboard role="hr" userName="HR" />;
+=======
+    return <HRDashboard />;
+>>>>>>> Stashed changes
   }
 
   return (
